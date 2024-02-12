@@ -13,5 +13,5 @@ with open('cfg/config.json', 'r') as config:
     data = json.load(config)
     encrypted_data = cipher_suite.encrypt(json.dumps(data).encode())
     
-    with open('/home/ubuntu/.config/webhook/config_encrypted', 'wb') as config_json:        
+    with open('/path/to/config_encrypted', 'wb') as config_json:        
         config_json.write(encrypted_data)
