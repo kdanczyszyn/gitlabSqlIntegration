@@ -1,0 +1,94 @@
+def getEnvFromBranch(branch) {
+  if (branch == 'main') {
+    return 'foo'
+  } 
+  else if (branch == 'test') {
+      return 'foo'
+  }
+  else {
+    return 'foo'
+ }
+}
+
+def chosen_agent = getEnvFromBranch(gitlabTargetBranch)
+def path = '/path/gitlabSqlIntegration'
+
+pipeline {
+    agent{
+        label "$chosen_agent"
+    }
+    
+    options{
+        gitLabConnection('gitlab')
+        gitlabBuilds(builds: ['Build', 'Test', 'Deploy'])
+    }
+    stages{
+        stage('Build'){
+            steps {
+                updateGitlabCommitStatus name: 'Build', state: 'pending'
+                checkout scmGit(browser: gitLab("${gitlabSourceRepoURL}"), extensions: [], userRemoteConfigs: [[credentialsId: '', url: "${gitlabSourceRepoSshUrl}"]])
+                script {
+                    
+                    def jsonParams = [
+                        sourcebranch: gitlabSourceBranch,
+                        targetbranch: gitlabTargetBranch,
+                        mergeiid: gitlabMergeRequestIid,
+                        status: gitlabMergeRequestState,
+                        repo_name: gitlabSourceRepoName.toLowerCase().replaceAll(' ', '-'),
+                        project_id: gitlabMergeRequestTargetProjectId
+                        ]
+                    
+                    def jsonContent = new groovy.json.JsonBuilder(jsonParams).toPrettyString()
+                    
+                    writeFile file: '/opt/gitlabSqlIntegration/buildParams.json', text: jsonContent
+                    
+                    def repo_name = gitlabSourceRepoName.toLowerCase().replaceAll(' ', '-')
+
+                    sh "sudo rm -rf ${path}/${repo_name}/repo"
+                    sh "sudo mkdir -p ${path}/${repo_name}/repo"
+                    sh "sudo mv * ${path}/${repo_name}/repo"
+                    sh "sudo chown -R ubuntu:ubuntu ${path}/${repo_name}"
+                }
+            }
+        }
+        stage('Test'){
+            steps {
+                sh """. /path/to/venv/bin/activate
+                    cd '${path}'
+                    coverage run -m pytest '${path}'/tests/test_merge_request_functions.py
+                    coverage json --pretty-print
+                """
+            }
+            post{
+                failure {
+					echo "[INFO] Unit Tests failed"                    
+                    updateGitlabCommitStatus name: 'Test', state: 'failed'
+				}
+                success {					
+                    updateGitlabCommitStatus name: 'Test', state: 'success'
+				}
+			}
+        }
+        stage('Deploy'){
+            steps{
+                updateGitlabCommitStatus name: 'Deploy', state: 'pending'
+                withCredentials([string(credentialsId: 'decryptKey', variable: 'secretkey')]) {
+                    script{
+                        sh """. /path/to/venv/bin/activate
+                            cd '${path}'
+                            python decrypt.py -key '${secretkey}'
+                            sudo chown ubuntu:ubuntu '${path}'/cfg/config.json
+                            python main.py
+                            sudo rm '${path}'/cfg/config.json
+                        """
+                    }
+                }
+            }
+            post {
+                failure {
+                    sh "sudo rm ${path}/cfg/config.json"
+                }
+            }
+        }
+    }
+}
