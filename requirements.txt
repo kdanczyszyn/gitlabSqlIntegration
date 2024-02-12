@@ -1,0 +1,6 @@
+pyodbc
+gitpython
+requests
+cryptography
+coverage
+pytest
