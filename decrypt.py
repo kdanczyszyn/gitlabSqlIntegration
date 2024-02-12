@@ -9,7 +9,7 @@ args = parser.parse_args()
 key = args.key
 cipher_suite = Fernet(key)
 
-with open('/home/ubuntu/.config/webhook/config_encrypted', 'rb') as config:
+with open('/path/to/config_encrypted', 'rb') as config:
     encrypted_data = config.read()
     decrypted_data = cipher_suite.decrypt(encrypted_data)
     decoded_json = decrypted_data.decode('utf-8')
